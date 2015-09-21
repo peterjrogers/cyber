@@ -1,0 +1,291 @@
+echo Batch file for collecting the live system state >> %FILE%
+echo Peterjrogers@hotmail.com >> %FILE%
+echo based on the Blue Team Handbook: Incident responce edition >> %FILE%
+
+no echo
+echo *** setting file path for output file *** >> %FILE%
+set OUTPUT_PATH=H:\
+set DATES=%DATE:/=_%
+for /f %i in ('hostname') do echo HOST=%i & @set HOST=%i
+set FILE=%OUTPUT_PATH%%HOST%___%DATES%.log
+echo output file is %FILE% >> %FILE%
+echo(  >> %FILE%
+
+echo *** Adding Temp directories into the system path *** >> %FILE%
+echo(  >> %FILE%
+set PATHS=%PATH%
+set PATH=%PATHS%;C:\Temp\;C:\Temp\Wininternals\
+echo %PATH%
+echo(  >> %FILE%
+
+echo *** System details - Document start info *** >> %FILE%
+echo(  >> %FILE%
+echo *** Hostname *** >> %FILE%
+echo %HOST% >> %FILE%
+echo(  >> %FILE%
+
+echo *** Timestamp *** >> %FILE%
+echo %DATE% %TIME% >> %FILE%
+echo(  >> %FILE%
+
+echo *** Logged on User *** >> %FILE%
+whoami >> %FILE%
+echo(  >> %FILE%
+
+echo *** Psinfo system info *** >> %FILE%
+psinfo /accepteula >> %FILE%
+
+echo *** Psinfo installed software *** >> %FILE%
+psinfo -s >> %FILE%
+
+echo *** Psinfo disk info *** >> %FILE%
+psinfo -d >> %FILE%
+
+echo *** System details *** >> %FILE%
+systeminfo >> %FILE%
+echo(  >> %FILE%
+
+echo *** Network config and communication details *** >> %FILE%
+ipconfig /allcompartments /all >> %FILE%
+echo(  >> %FILE%
+
+echo *** Protocol statistics and current TCP/IP network connections *** >> %FILE%
+netstat -nao >> %FILE%
+echo(  >> %FILE%
+
+echo *** local routing table. *** >> %FILE%
+netstat -nr >> %FILE%
+echo(  >> %FILE%
+
+echo *** netstat -vb Disabled as Requires elevation *** >> %FILE%
+::netstat -vb >> %FILE%
+echo(  >> %FILE%
+
+echo *** Get a list of all the computer's connections *** >> %FILE%
+net use >> %FILE%
+echo(  >> %FILE%
+
+echo *** net session Disabled as Requires elevation *** >> %FILE%
+::net session >> %FILE%
+echo(  >> %FILE%
+
+echo *** Shared resources on the local host *** >> %FILE%
+net view \\%HOST%
+echo(  >> %FILE%
+
+echo *** Shared resources on the local host's loopback *** >> %FILE%
+net view \\127.0.0.1 >> %FILE%
+echo(  >> %FILE%
+
+echo *** Browse resouces on the local domain *** >> %FILE%
+net view >> %FILE%
+echo(  >> %FILE%
+
+echo *** NetBIOS over TCP/IP session table *** >> %FILE%
+nbtstat -S >> %FILE%
+echo(  >> %FILE%
+
+echo ***  PC's routing table *** >> %FILE%
+route print >> %FILE%
+echo(  >> %FILE%
+
+echo ***  Current ARP entries *** >> %FILE%
+arp -a >> %FILE%
+echo(  >> %FILE%
+
+echo ***  WLAN interface info *** >> %FILE%
+netsh wlan show interfaces >> %FILE%
+echo(  >> %FILE%
+
+echo ***  WLAN info *** >> %FILE%
+netsh wlan show all >> %FILE%
+echo(  >> %FILE%
+
+echo ***  DNS client resolver cache *** >> %FILE%
+ipconfig /displaydns >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled due to length of host file on test machine - Host file *** >> %FILE%
+::more %SystemRoot%\System32\Drivers\etc\hosts >> %FILE%
+echo(  >> %FILE%
+
+echo *** Network details MAC address and physical / logical NIC's *** >> %FILE%
+wmic nicconfig get description,IPAddress,MACaddress >> %FILE%
+echo(  >> %FILE%
+
+echo *** Service info (Simple) *** >> %FILE%
+echo(  >> %FILE%
+
+echo *** Running Windows services *** >> %FILE%
+net start >> %FILE%
+echo(  >> %FILE%
+
+echo *** Currently running processes *** >> %FILE%
+tasklist >> %FILE%
+echo(  >> %FILE%
+
+echo *** Services hosted in each process *** >> %FILE%
+tasklist /svc >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled services MMC launcher *** >> %FILE%
+::services.msc
+echo(  >> %FILE%
+
+echo *** Service info (Detailed) *** >> %FILE%
+echo(  >> %FILE%
+
+echo *** Service and Driver info *** >> %FILE%
+sc query >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled as null chars output - service config info *** >> %FILE%
+::wmic service list config >> %FILE%
+echo(  >> %FILE%
+
+echo *** Process info *** >> %FILE%
+wmic process list >> %FILE%
+echo(  >> %FILE%
+wmic process list status >> %FILE%
+echo(  >> %FILE%
+wmic process list memory >> %FILE%
+echo(  >> %FILE%
+
+echo *** Scheduled jobs *** >> %FILE%
+wmic job list brief >> %FILE%
+echo(  >> %FILE%
+
+echo *** Process info - Startup *** >> %FILE%
+wmic startup list brief >> %FILE%
+echo(  >> %FILE%
+
+echo *** Domain info *** >> %FILE%
+wmic ntdomain list brief >> %FILE%
+echo(  >> %FILE%
+
+echo *** Verbose task list info *** >> %FILE%
+tasklist /V >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled event viewer MMC launcher *** >> %FILE%
+::eventvwr
+echo(  >> %FILE%
+
+echo *** Disabled - requires elevation *** >> %FILE%
+::wevtutil qe security /f:text >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled Local User and Group MMC Launcher *** >> %FILE%
+::Lusrmgr
+echo(  >> %FILE%
+
+echo *** Local user accounts *** >> %FILE%
+net users >> %FILE%
+echo(  >> %FILE%
+
+echo *** Local Admininstrators *** >> %FILE%
+net localgroup administrators >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled - requires elevation - Autostart analysys *** >> %FILE%
+::msconfig "profile" directories, "startup" >> %FILE%
+echo(  >> %FILE%
+
+echo *** Scheduled tasks *** >> %FILE%
+schtasks >> %FILE%
+echo(  >> %FILE%
+
+echo *** Psloglist view logs for last hour *** >> %FILE%
+psloglist -h 1 /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Microsoft Wininternals *** >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show all TCP endpoints *** >> %FILE%
+tcpvcon -a /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** See who's logged on *** >> %FILE%
+psloggedon -a /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Needs Admin Privilages *** >> %FILE%
+logonsessions -a /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Process information *** >> %FILE%
+pslist /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show process thread detail. *** >> %FILE%
+pslist -d >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show process memory detail. *** >> %FILE%
+pslist -m >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show processes, memory information and threads. *** >> %FILE%
+pslist -x >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show processes tree. *** >> %FILE%
+pslist-t >> %FILE%
+echo(  >> %FILE%
+
+echo *** Handle Print count of each type of handle open. *** >> %FILE%
+handle -s /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** view Handle *** >> %FILE%
+handle >> %FILE%
+echo(  >> %FILE%
+
+echo *** Dump all handle information *** >> %FILE%
+handle -a >> %FILE%
+echo(  >> %FILE%
+
+echo *** DLL Viewer *** >> %FILE%
+listdlls /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Flag DLLs that relocated because they are not loaded at their base address. *** >> %FILE%
+listdlls -r >> %FILE%
+echo(  >> %FILE%
+
+echo *** Only list unsigned DLLs. *** >> %FILE%
+listdlls -u >> %FILE%
+echo(  >> %FILE%
+
+echo *** Show DLL version information. *** >> %FILE%
+listdlls -v >> %FILE%
+echo(  >> %FILE%
+
+echo *** psservice show all services *** >> %FILE%
+psservice /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled (slow) - check for unsigned files in c:\windows\system32  *** >> %FILE%
+::sigcheck -u -e c:\windows\system32 /accepteula >> %FILE%
+echo(  >> %FILE%
+
+echo *** Disabled (launcher) - system driver load order GUI  *** >> %FILE%
+::loadord /accepteula
+echo(  >> %FILE%
+
+echo *** Disabled (launcher) - NT Object Manager's name space GUI  *** >> %FILE%
+::winobj /accepteula
+echo(  >> %FILE%
+
+echo *** Disabled (launcher) - Process Explorer GUI  *** >> %FILE%
+::procexp /accepteula
+echo(  >> %FILE%
+
+echo *** Disabled (launcher) (admin) - Process Monitor GUI  *** >> %FILE%
+::procmon /accepteula
+echo(  >> %FILE%
+
+echo *** Disabled (admin) Currently active logon sessions *** >> %FILE%
+::logonsessions /p /accepteula >> %FILE%
+echo(  >> %FILE%
