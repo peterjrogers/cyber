@@ -1,4 +1,4 @@
-Enter file contents herefrom tools import Tools
+from tools import Tools
 import os
 from geopy.distance import vincenty
 import pprint
@@ -120,11 +120,17 @@ class Inetflow(Tools):
         self.DistFlowCutOffFactor  = 0.0005
         self.DistBytesCutOffFactor = 0.000005
         
+        
         self.field_map = {'Protocol':-1, 'SourceAddress':-1, 'SourcePort':-1, 'DestinationAddress':-1, 'DestinationPort':-1, 'BytesInVolume':-1, 'BytesInRatePerDuration':-1, 'FlowDuration':-1, 'PacketsInVolume':-1, 'PacketsInRatePerDuration':-1}
         
+        #Set the reference point for distance calculations
         self.home_city = (52.0175, -0.7896)
         
-        self.SourceFilter = ''
+        #Use the source filter to enable mapping of outbound flows from this IP / Prefix using text matching only
+        self.SourceFilter = '193.127.210'
+        
+        #The threshold where flows above this are recorded in detail
+        self.TrustThreshold = 5
         
         self.open_db()
         
@@ -189,6 +195,9 @@ class Inetflow(Tools):
         self.netflow_dict['load_file_history'][cfile]['Avg_BytesPerFlow'] = 0
         self.netflow_dict['load_file_history'][cfile]['Avg_AsnMetric'] = 0
         
+        #create a dictionary for recording the flows above self.TrustThreshold
+        self.netflow_dict['Report'] = {}
+        
         #identify the first line with the data label
         init = 0
         
@@ -229,7 +238,8 @@ class Inetflow(Tools):
                     #if self.SourceFilter in SourceAddress: continue
                     
                     #swap around SourceAddress and DestinationAddress for outbound flow analysis
-                    if self.SourceFilter in SourceAddress: SourceAddress = DestinationAddress
+                    if self.SourceFilter in SourceAddress: 
+                        SourceAddress = DestinationAddress
                     
                     #source filter to ignore any inbound packets - Outbound only
                     #if self.SourceFilter not in SourceAddress: continue
@@ -327,14 +337,12 @@ class Inetflow(Tools):
                     
                     #update the Avg_AsnMetric for the file history
                     #self.netflow_dict['ASN_Metrics']['Trust'][ASN]
-                    #
                     try: trust_res = self.netflow_dict['ASN_Metrics']['Trust'][AS_Number]
                     except: trust_res = self.metric_as(AS_Number, verbose=0)
                     try: self.netflow_dict['load_file_history'][cfile]['Avg_AsnMetric'] += int(trust_res)
                     except: pass
                     
                     #global and load_file ASN stats
-                    
                     try: 
                         self.netflow_dict['ASN_Stats']['Total_TotalFlowCount'] += 1
                         self.netflow_dict['load_file_history'][cfile]['Total_TotalFlowCount'] += 1
@@ -346,60 +354,71 @@ class Inetflow(Tools):
                     except: pass
 
                
+                    #store flows that have trust_res > self.TrustThreshold
+                    if trust_res < self.TrustThreshold: continue
+                    
                     #flows will be stored by the following format to provide a reasenable level of data compression:
-                    #self.netflow_dict[DestinationAddress] = {}
-                    #self.netflow_dict[DestinationAddress][protocol] = {}
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort] = {}
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress] = {}
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort] = {}
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] = 1    #if the first otherwise will increment by +1
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] = BytesInVolume    #if the first otherwise will increment by sum
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] = FlowDuration    #if the first otherwise will increment by sum
-                    #self.netflow_dict[DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] = PacketsInRatePerDuration    #if the first otherwise will increment by sum
+                    #self.netflow_dict['Report'][DestinationAddress] = {}
+                    #self.netflow_dict['Report'][DestinationAddress][protocol] = {}
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort] = {}
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress] = {}
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort] = {}
+                    
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] = 1    #if the first otherwise will increment by +1
+                    
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] = BytesInVolume    #if the first otherwise will increment by sum
+                    
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] = FlowDuration    #if the first otherwise will increment by sum
+                    
+                    #self.netflow_dict['Report'][DestinationAddress][protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] = PacketsInRatePerDuration    #if the first otherwise will increment by sum
                     
                     #check if the destination dict exists, if not then create it
-                    #try: self.netflow_dict[DestinationAddress]
-                    #except: self.netflow_dict[DestinationAddress] = {}
+                    try: self.netflow_dict['Report'][DestinationAddress]
+                    except: self.netflow_dict['Report'][DestinationAddress] = {}
                     
                     #check if the protocol dict exists, if not then create it
-                    #try: self.netflow_dict[DestinationAddress][Protocol]
-                    #except: self.netflow_dict[DestinationAddress][Protocol] = {}
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol]
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol] = {}
                     
                     #check if the DestinationPort dict exists, if not then create it
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort]
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort] = {}
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort]
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort] = {}
                     
                     #check if the SourceAddress dict exists, if not then create it
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress]
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress] = {}
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress]
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress] = {}
                     
                     #check if the SourcePort dict exists, if not then create it
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort] = {}
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort] = {}
+                    
+                    #check if the TrustMetric dict exists, if not create it
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress]['TrustMetric']
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress]['TrustMetric'] = trust_res
                     
                     #check if the TotalFlowCount entry exists, if so increment the total by 1
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] += 1
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] = 1
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] += 1
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['TotalFlowCount'] = 1
                     
                     #check if the BytesInVolume entry exists, if so increment the total by sum
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] += BytesInVolume
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] = BytesInVolume
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] += BytesInVolume
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] = BytesInVolume
                     
                     #check if the FlowDuration entry exists, if so increment the total by sum
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] += FlowDuration
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] = FlowDuration
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] += FlowDuration
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] = FlowDuration
                     
                     #check if the PacketsInRatePerDuration entry exists, if so increment the total by sum
-                    #try: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] += PacketsInRatePerDuration
-                    #except: self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] = PacketsInRatePerDuration
-                    
-                    #test the new stucture
-                    #pprint.pprint(self.netflow_dict[DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort])
-                    
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] += PacketsInRatePerDuration
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['PacketsInRatePerDuration'] = PacketsInRatePerDuration
+
                            
                 except: pass
         
         #end of file
+        
+        
+        
         try: 
             self.netflow_dict['ASN_Stats']['Avg_BytesPerFlow'] = self.netflow_dict['ASN_Stats']['Total_BytesInVolume'] / self.netflow_dict['ASN_Stats']['Total_TotalFlowCount']
             
@@ -422,11 +441,43 @@ class Inetflow(Tools):
         pprint.pprint(self.netflow_dict['load_file_history'][cfile])
         print
         #print 'Avg_AsnMetric:', self.netflow_dict['load_file_history'][cfile]['Avg_AsnMetric']
+        
+        #print the flows that have trust_res > self.TrustThreshold
+        #pprint.pprint(self.netflow_dict['Report'])
 
         #self.view_db()
         self.save_db()
         self.load()
         
+        
+    def as_lookup(self, ip):
+        asn_res = geoip_asn.asn_by_addr(ip)
+        #print asn_res
+        asn_raw = asn_res.split(' ')
+        return asn_raw[0]
+        
+    
+    def report_trust(self, cmd='100'):
+        """
+        view the flows that are above self.TrustThreshold
+        """
+        try: self.TrustThreshold = int(cmd)
+        except: pass
+        
+        try: 
+            for ip in self.netflow_dict['Report']: 
+                try:
+                    asn = self.as_lookup(ip)
+                    res = int(self.metric_as(asn, 0))
+                    if res > self.TrustThreshold: 
+                        print
+                        print ip
+                        if 'v' in cmd:
+                            print 'trust %d' % res
+                            print geoip_asn.asn_by_addr(ip)
+                        if 'list' in cmd: pprint.pprint(self.netflow_dict['Report'][ip])
+                except: pass
+        except: pass
         
         
     def get_asn_dist(self):
@@ -699,6 +750,7 @@ class Inetflow(Tools):
             
             self.TrustScale = 1000
             self.TrustMetric = ((((self.FlowCountMetric) * self.TotalByteMetric) * self.DistanceMetric) / 500000) * self.TrustScale
+            if self.TrustMetric < 1: self.TrustMetric = 1.
             if verbose > 0: print 'TrustMetric = ', '{:0,.0f}'.format(self.TrustMetric), 'out of', self.TrustScale, '(lower is better)'
             return self.TrustMetric
             
