@@ -130,7 +130,7 @@ class Inetflow(Tools):
         self.SourceFilter = '193.127.210'
         
         #The threshold where flows above this are recorded in detail
-        self.TrustThreshold = 5
+        self.TrustThreshold = 200
         
         self.open_db()
         
@@ -355,7 +355,7 @@ class Inetflow(Tools):
 
                
                     #store flows that have trust_res > self.TrustThreshold
-                    if trust_res < self.TrustThreshold: continue
+                    #if trust_res < self.TrustThreshold: continue
                     
                     #flows will be stored by the following format to provide a reasenable level of data compression:
                     #self.netflow_dict['Report'][DestinationAddress] = {}
@@ -404,6 +404,10 @@ class Inetflow(Tools):
                     try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] += BytesInVolume
                     except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['BytesInVolume'] = BytesInVolume
                     
+                    #check if the IPBytesInVolume entry exists for per IP, if so increment the total
+                    try: self.netflow_dict['Report'][DestinationAddress][Protocol]['IPBytesInVolume'] += BytesInVolume
+                    except: self.netflow_dict['Report'][DestinationAddress][Protocol]['IPBytesInVolume'] = BytesInVolume
+                    
                     #check if the FlowDuration entry exists, if so increment the total by sum
                     try: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] += FlowDuration
                     except: self.netflow_dict['Report'][DestinationAddress][Protocol][DestinationPort][SourceAddress][SourcePort]['FlowDuration'] = FlowDuration
@@ -435,19 +439,37 @@ class Inetflow(Tools):
         self.netflow_dict['load_file_history']['StdDevBytesPerFlow'] = res[0][0]
         self.netflow_dict['load_file_history']['StdDevBytesPerFlowAvg'] = res[0][1]
         
-        #display the Avg_AsnMetric
-        print
-        print 'Stats for: ', cfile
-        pprint.pprint(self.netflow_dict['load_file_history'][cfile])
-        print
-        #print 'Avg_AsnMetric:', self.netflow_dict['load_file_history'][cfile]['Avg_AsnMetric']
+        #display the Asn Load Stats
+        self.cfile = cfile
+        self.asn_stats()
         
-        #print the flows that have trust_res > self.TrustThreshold
-        #pprint.pprint(self.netflow_dict['Report'])
+        #display result above self.TrustThreshold
+        self.report_trust('v')
+        
+        #display the IP address with the highest number of flows
+        self.view_flows()
+        
+        #display the IP address with the highest number of Bytes
+        self.view_bytes()
+
 
         #self.view_db()
         self.save_db()
         self.load()
+        
+        
+    def asn_stats(self):
+        """
+        help: view the ASN stats for a load file
+        pass the file in as self.cfile
+        """
+        try:
+            print
+            print 'Stats for: ', self.cfile
+            pprint.pprint(self.netflow_dict['load_file_history'][self.cfile])
+            print
+            print 'Average Trust per flow:   ', int(self.netflow_dict['load_file_history'][self.cfile]['Avg_AsnMetric'] / self.netflow_dict['load_file_history'][self.cfile]['Total_TotalFlowCount'])
+        except: pass
         
         
     def as_lookup(self, ip):
@@ -457,12 +479,19 @@ class Inetflow(Tools):
         return asn_raw[0]
         
     
-    def report_trust(self, cmd='100'):
+    def report_trust(self, cmd=''):
         """
-        view the flows that are above self.TrustThreshold
+        help: view the flows that are above self.TrustThreshold
+        usage: netflow.report_trust()
+        options: enter a number to change self.TrustThreshold netflow.report_trust(100)
+        verbose mode = netflow.report_trust('v')
+        list mode = netflow.report_trust('list')
         """
         try: self.TrustThreshold = int(cmd)
         except: pass
+        
+        print
+        print 'Report of IP address above the TrustThreshold of', self.TrustThreshold
         
         try: 
             for ip in self.netflow_dict['Report']: 
@@ -480,6 +509,109 @@ class Inetflow(Tools):
         except: pass
         
         
+    def view_ip(self, ip):
+        """
+        help: view the IP record for the Report dict section, the last loaded netflow file
+        """
+        try: pprint.pprint(self.netflow_dict['Report'][ip])
+        except: pass
+        
+        
+    def gen_flows(self):
+        """
+        
+        """
+        self.out = {}
+        
+        try:
+            for ip in self.netflow_dict['Report']:
+                try:
+                    for protocol in self.netflow_dict['Report'][ip]:
+                        count = len(self.netflow_dict['Report'][ip][protocol].keys())
+                        try: 
+                            #check if record exists for another protocol
+                            sum = self.out[ip] + count
+                            self.out[ip] = sum
+                        except: self.out[ip] = count      
+                except: pass
+                
+        except: pass
+
+
+    def view_flows(self, cmd=10):
+        """
+        help: view the IP address with the most flows
+        """
+        flow_sum = 0
+        self.gen_flows()
+        total_flows = len(self.out)
+        print
+        print 'Total unique IP addr with flows:', total_flows
+        dist = []
+        for ip in self.out:
+            dist.append(self.out[ip])
+            flow_sum += self.out[ip]
+        dist.sort()
+        #print dist
+        print 'Maximum flow count for a single IP addr:   ', dist[-1]
+        print 'Average flow count per IP addr:    ', int(flow_sum / total_flows)
+        print 'Showing the top   ', cmd
+        print
+        sum = 0 - cmd
+        filter = dist[sum]
+        for ip in self.out:
+            if self.out[ip] >= filter:
+                print ip, '   ', self.out[ip]
+                
+        print
+       
+       
+    def gen_bytes(self):
+        """
+        self.netflow_dict['Report'][DestinationAddress][Protocol]['IPBytesInVolume']
+        """
+        self.out = {}
+        try:
+            for ip in self.netflow_dict['Report']:
+                try:
+                    for protocol in self.netflow_dict['Report'][ip]:
+                        try: 
+                            #check if record exists for another protocol
+                            sum = self.out[ip] + self.netflow_dict['Report'][ip][protocol]['IPBytesInVolume']
+                            self.out[ip] = sum
+                        except: self.out[ip] = self.netflow_dict['Report'][ip][protocol]['IPBytesInVolume']
+                except: pass        
+        except: pass
+        
+    
+    def view_bytes(self, cmd=10):
+        """
+        help: view the IP address with the most Bytes
+        """
+        self.gen_bytes()
+        flows = 0
+        total = 0
+        print
+        dist = []
+        for ip in self.out:
+            dist.append(self.out[ip])
+            flows += 1
+            total += self.out[ip]
+        dist.sort()
+        #print dist
+        avgBytes = int(total / flows)
+        print 'Maximum Bytes for a single IP addr:   ', '{:0,d}'.format(dist[-1])
+        print 'Average flow count per IP addr:    ', '{:0,d}'.format(avgBytes)
+        print 'Showing the top   ', cmd
+        print
+        sum = 0 - cmd
+        filter = dist[sum]
+        for ip in self.out:
+            if self.out[ip] >= filter:
+                print ip, '   ', '{:0,d}'.format(self.out[ip])
+                
+        print
+    
     def get_asn_dist(self):
         """
         get a distribution list of TotalFlowCount per ASN
@@ -540,14 +672,15 @@ class Inetflow(Tools):
         except: pass
         
         
-    def std_dev(self, clist):
+    def std_dev(self, clist=[]):
         """
-        1) Work out the Mean avg
-        2) Then for each number: subtract the Mean and square the result
-        3) Then work out the mean of those squared differences
-        4) Retrun the square root
+        help: get the standard deviation
+        usage: netflow.std_dev()
+        pass the list in as netflow.out
+        return is math.sqrt(sq_avg), avg      via netflow.out
         """
         try:
+            if not clist: clist = self.out
             mean = 0
             count = 0
             for num in clist: 
@@ -562,31 +695,38 @@ class Inetflow(Tools):
                 sq_mean += (sum * sum)
             sq_avg = sq_mean / count
             #print sq_avg
-            return math.sqrt(sq_avg), avg
+            self.out = math.sqrt(sq_avg), avg
+            return self.out
         except: pass
         
         
     def percentile(self, N, percent, key=lambda x:x):
         """
-        Find the percentile of a list of values.
+        help: Find the percentile of a list of values.
         http://code.activestate.com/recipes/511478-finding-the-percentile-of-the-values/
         @parameter N - is a list of values. Note N MUST BE already sorted.
         @parameter percent - a float value from 0.0 to 1.0.
         @parameter key - optional key function to compute value from each element of N.
+        usage: netflow.percentile(percent)    pass the list in as netflow.out
+        output will be netflow.out
         """
-        if not N: return None
+        try: N.sort()
+        except: N = self.out.sort()
         k = (len(N)-1) * percent
         f = math.floor(k)
         c = math.ceil(k)
         if f == c: return key(N[int(k)])
         d0 = key(N[int(f)]) * (c-k)
         d1 = key(N[int(c)]) * (k-f)
-        return d0+d1
+        self.out = d0+d1
+        return self.out
             
     
     def save_db(self):
         """
-        save self.netflow_dict to db_file
+        help: save self.netflow_dict to db_file
+        usage: netflow.save_db()
+        note: the dictionary gets saved automatically
         """
         cfile = open(db_file, 'wb')
         pickle.dump(self.netflow_dict, cfile, -1)
@@ -595,7 +735,9 @@ class Inetflow(Tools):
         
     def open_db(self):
         """
-        open self.netflow_dict from db_file
+        help: open self.netflow_dict from db_file
+        usage: netflow.open_db()
+        note: the dictionary gets opened automatically
         """
         cfile = open(db_file, 'rb')
         self.netflow_dict = pickle.load(cfile)
@@ -603,32 +745,40 @@ class Inetflow(Tools):
         
         
     def view_db(self): 
+        """
+        help: view the entire self.netflow_dict
+        usage: netflow.view_db()
+        """
         try: pprint.pprint(self.netflow_dict)
         except: pass
         
         
     def get_asn(self):
         """
-        Get the AS# list
+        help: Get the AS# list
+        usage: netflow.get_asn()
+        result list is netflow.out
         """
         try:
-            out = []
+            self.out = []
             keys = self.netflow_dict.keys()
             for key in keys:
                 if 'ASN' in key: continue
-                if 'AS' in key: out.append(key)
-            return out   
+                if 'AS' in key: self.out.append(key)
+            return self.out   
         except: pass
         
         
     def asn_metric(self):
         """
-        Calculate the Trust metric for each AS
+        help: Calculate the Trust metric for each AS
         Store the result in dict key self.netflow_dict['ASN_Metrics']
         return a sorted list of metrics
+        usage: netflow.asn_metric()
+        result list of sorted matrics in netflow.out
         """
         try:
-            out = []
+            self.out = []
             self.netflow_dict['ASN_Metrics'] = {}
             self.netflow_dict['ASN_Metrics']['Trust'] = {}
             keys = self.get_asn()
@@ -637,23 +787,21 @@ class Inetflow(Tools):
                     trust = int(self.metric_as(ASN, verbose=0))
                     if not trust: continue
                     self.netflow_dict['ASN_Metrics']['Trust'][ASN] = trust
-                    out.append(trust)                        
+                    self.out.append(trust)                        
                 except: pass
                 
             #pprint.pprint(self.netflow_dict['ASN_Metrics']['Trust'])
-            out.sort()
-            return out
+            self.out.sort()
+            return self.out
             
         except: pass
-        
-        
         
         
     def run(self, cmd):
         """
         help: Execute a function or assign a variable within the local scope
         usage: netflow.[cmd]
-        example: netflow.ls
+        example: netflow.ls()
         """
         self.res = ''
         try:
@@ -667,7 +815,22 @@ class Inetflow(Tools):
         except: pass
         
         
+    def help(self):
+        """
+        View the help and example information for each function in the class
+        """
+        for item in dir(self): 
+            try: 
+                exec('self.help_res = self.' + item + '.__doc__')
+                if 'help' in self.help_res: print '\n', item, '\n', self.help_res
+            except: pass
+        
+        
     def view_loadfile(self):
+        """
+        help: view the stats for each loadfile
+        usage: netflow.view_loadfile()
+        """
         try:
             keys = self.netflow_dict['load_file_history']
             pprint.pprint(keys)
@@ -675,6 +838,10 @@ class Inetflow(Tools):
         
         
     def view_stats(self): 
+        """
+        help: view the stats for all the learnt netflow reports
+        usage: netflow.view_stats()
+        """
         try: 
             print 'Avg_BytesPerFlow:', '{:0,d}'.format(self.netflow_dict['ASN_Stats']['Avg_BytesPerFlow'])
             print 'Dist_FlowCutOff:', '{:0,.0f}'.format(self.netflow_dict['ASN_Stats']['Dist_FlowCutOff'])
@@ -690,7 +857,11 @@ class Inetflow(Tools):
         except: pass
         
         
-    def view_as(self, asn): 
+    def view_as(self, asn):
+        """
+        help: view the dict entry for a specified AS#
+        usage: netflow.view_as('AS2856')
+        """
         try: 
             asn = asn.upper()
             print 'trying ', asn
@@ -700,11 +871,12 @@ class Inetflow(Tools):
         
     def metric_as(self, asn, verbose=1):
         """
-        Metric to define how trustworthy the AS is
+        Help: Metric to define how trustworthy the AS is
         DistanceMetric = (SourceAddressDistance / 2500.)
         TotalByteMetric = difference between AS BytesPerFlow and ALL AS AVG BytesPerFlow
         FlowCountMetric = (Dist_FlowCutOff / TotalFlowCount) limited to a max of 10
         TrustMetric = ((FlowCountMetric) * TotalByteMetric) * DistanceMetric
+        usage: netflow.metric_as('AS2856')
         """
         try:
             asn = asn.upper()
@@ -758,6 +930,10 @@ class Inetflow(Tools):
     
 
     def load_blackhole(self):
+        """
+        help: load a list of IP address loacted in blackhole.txt and score each IP based AS trust metric
+        usage: netflow.load_blackhole()
+        """
         self.BlackTrustMetric = 0
         self.BlackCount = 0
         AS_List = []
