@@ -102,7 +102,7 @@ class Inetflow(Tools):
         """
         Tools.__init__(self)
         self.verbose = verbose
-        self.path = 'C:\\temp\\' + 'netflow' + '\\'
+        self.path = 'h:\\backup\\' + 'netflow' + '\\'
         
         self.netflow_dict = {}
         self.netflow_dict['load_file_history'] = {}
